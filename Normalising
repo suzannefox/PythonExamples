@@ -1,0 +1,31 @@
+from sklearn.datasets import load_iris
+from sklearn.preprocessing import StandardScaler
+from scipy import stats
+import numpy as np
+
+# ----------------------------------------------------------------
+# Load the iris dataset
+# ----------------------------------------------------------------
+data = load_iris()
+X_orig = data.data
+X = X_orig
+
+X_std = StandardScaler().fit_transform(X)
+X_zscore = stats.zscore(X)
+X_minusmean = (X - X.mean(axis=0))
+X_norm = (X - X.mean(axis=0))/X.std(axis=0)
+
+# Really important to note that dividing by X.mean() divides by mean across all columns
+# and dividing by X.mean(axis=0) divides by columnwise means (which is what you want)
+
+vals = 5
+print("orig   ",X[0:vals,0])
+print("mean(0)",X.mean(axis=0))
+print("mean() ",X.mean())
+print("st dev ",X.std(axis=0))
+
+print("-mean  ",X_minusmean[0:vals,0])
+
+print("stdsca ",X_std[0:vals,0])
+print("zscore ",X_zscore[0:vals,0])
+print("norm   ",X_norm[0:vals,0])
