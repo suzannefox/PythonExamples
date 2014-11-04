@@ -1,0 +1,92 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Nov  3 19:38:17 2014
+
+@author: Suzanne
+"""
+
+
+
+# In regression, it is often recommended to center the variables so that the predictors have mean 0. 
+# This makes it so the intercept term is interpreted as the expected value of Yi when the predictor 
+# values are set to their means. Otherwise, the intercept is interpreted as the expected value of Yi 
+# when the predictors are set to 0, which may not be a realistic or interpretable situation (e.g. what 
+# if the predictors were height and weight?). Another practical reason for scaling in regression is when 
+# one variable has a very large scale, e.g. if you were using population size of a country as a predictor. 
+# In that case, the regression coefficients may on be a very small order of magnitude (e.g. 10−6) which can 
+# be a little annoying when you're reading computer output, so you may convert the variable to, for example, 
+# population size in millions. The convention that you standardize predictions primarily exists so that the 
+# units of the regression coefficients are the same.
+#
+# As @gung alludes to and @MånsT shows explicitly (+1 to both, btw), centering/scaling does not effect your 
+# statistical inference in regression models - the estimates are adjusted appropriately and the p-values will 
+# be the same.
+#
+# Other situations where centering and/or scaling may be useful:
+#
+# when you're trying to sum or average variables that are on different scales, perhaps to create a composite 
+# score of some kind. Without scaling, it may be the case that one variable has a larger impact on the sum 
+# due purely to its scale, which may be undesirable.
+#
+# To simplify calculations and notation. For example, the sample covariance matrix of a matrix of values 
+# centered by their sample means is simply X′X. Similarly, if a univariate random variable X has been mean 
+# centered, then var(X)=E(X2) and the variance can be estimated from a sample by looking at the sample mean 
+# of the squares of the observed values.
+#
+# Related to aforementioned, PCA can only be interpreted as the singular value decomposition of a data matrix 
+# when the columns have first been centered by their means.
+#
+# Note that scaling is not necessary in the last two bullet points I mentioned and centering may not be necessary 
+# in the first bullet I mentioned, so the two do not need to go hand and hand at all times.
+
+import numpy as np
+from scipy import stats
+import matplotlib.pyplot as plt 
+from sklearn import preprocessing
+
+#np.set_printoptions(precision=3)
+np.set_printoptions(formatter={'float': lambda x: "{0:+0.3f}".format(x)})
+array_input = np.array([1.0, 56.0, 45, 12, 97, 22, 17])
+#Center the data by making the mean=0
+array_nomean = array_input - array_input.mean(axis=0)
+#Standardizing - subtracting the mean and dividing by the standard deviation.
+array_norm = (array_input - array_input.mean(axis=0))/array_input.std(axis=0)
+array_zscore = stats.zscore(array_input)
+array_normalize = preprocessing.scale(array_input)
+#Rescale to be between 0 and 1
+array_minmax = (array_input - array_input.min())/(array_input.max() - array_input.min())
+min_max_scaler = preprocessing.MinMaxScaler()
+array_mmscale = min_max_scaler.fit_transform(array_input)
+
+print("INPUT     ",array_input, " Mean {0:0.2f}".format( array_input.mean())," Min ",array_input.min()," max ",array_input.max())
+print("NO MEAN   ",array_nomean, "Mean {0:0.2f}".format( array_nomean.mean())," Min ",array_nomean.min()," max ",array_nomean.max())
+print("ZSCORE    ",array_zscore, "Mean {0:0.2f}".format( array_zscore.mean())," Min ",array_zscore.min()," max ",array_zscore.max())
+print("NORMALIZE ",array_normalize, "Mean {0:0.2f}".format( array_normalize.mean())," Min ",array_normalize.min()," max ",array_normalize.max())
+print("NORM      ",array_norm, "Mean {0:0.2f}".format( array_norm.mean())," Min ",array_norm.min()," max ",array_norm.max())
+print("MIN MAX   ",array_minmax, "Mean {0:0.2f}".format( array_minmax.mean())," Min ",array_minmax.min()," max ",array_minmax.max())
+print("MM SCALER ",array_mmscale, "Mean {0:0.2f}".format( array_mmscale.mean())," Min ",array_mmscale.min()," max ",array_mmscale.max())
+
+
+# Four axes, returned as a 2-d array  
+plot_rows = 3
+plot_cols = 2
+
+fig, axarr = plt.subplots(plot_rows, plot_cols)
+fig.tight_layout()
+
+axarr[0,0].hist(array_input)
+axarr[0,0].set_title("array_input")
+axarr[0,1].hist(array_nomean)
+axarr[0,1].set_title('array_nomean')
+
+axarr[1,0].hist(array_zscore)
+axarr[1,0].set_title("array_zscore")
+axarr[1,1].hist(array_normalize)
+axarr[1,1].set_title('array_normalize')
+
+axarr[2,0].hist(array_minmax)
+axarr[2,0].set_title("array_minmax")
+axarr[2,1].hist(array_mmscale)
+axarr[2,1].set_title('array_mmscale')
+
+plt.show()
