@@ -1,0 +1,18 @@
+    # Have a look at the header of each file. Print to a file so I 
+    # can see what's going on more easily
+    diag_file = open(data_path + "datadiagnostics.txt", 'w')
+    
+    for root, dirs, files in os.walk(data_path):
+        for file in files:
+            if file.endswith(".csv"):
+                 print("===============================================")
+                 print("===============================================", file=diag_file)
+                 
+                 in_file = pd.read_csv(data_path + file, skiprows=19)
+                 print('File is {0}, Rows = {1}, Cols = {2}'.format(file, in_file.shape[0], in_file.shape[1]))
+                 print('File is {0}, Rows = {1}, Cols = {2}'.format(file, in_file.shape[0], in_file.shape[1]), file=diag_file)
+
+                 print(df_analysis(in_file))
+                 print(df_analysis(in_file),file=diag_file)
+                 
+    diag_file.close()
