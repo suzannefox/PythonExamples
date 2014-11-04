@@ -1,0 +1,29 @@
+# =======================================================================
+# 1. Try to figure out the encoding
+#    read using a number of options and then write as utf-8
+# =======================================================================
+
+data_path = 'C:/Users/Public/Documents/MSc-DataScience/INM430/Data/'
+data_file = 'london-borough-profiles.csv'
+
+encodings = ['utf-8', 'windows-1250', 'windows-1252']
+for e in encodings:
+    try:
+        fh = codecs.open(data_path + data_file, 'r', encoding=e)
+        fh.readlines()
+        fh.seek(0)
+    except UnicodeDecodeError:
+        print('got unicode error with %s , trying different encoding' % e)
+    else:
+        print('opening the file with encoding:  %s ' % e)
+        continue 
+
+ Open file and write as UTF-8
+in_file = codecs.open(data_path + data_file, 'r', 'windows-1250')
+out_file = codecs.open(data_path + "NEW_" + data_file, "w", "utf-8")
+    
+for line in in_file:
+    print(line)
+    out_file.write(line)
+
+data_file = 'NEW_london-borough-profiles.csv'
