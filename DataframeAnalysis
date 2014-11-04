@@ -1,0 +1,43 @@
+# =======================================================================
+# Functions, analyse a dataframe
+# =======================================================================
+def df_analysis(inDataFrame):
+    icol=0
+    meandatatypes=['float64','int64','float']
+    df_dtypes = inDataFrame.dtypes
+
+    df = pd.DataFrame(columns=['offset','colname','coltype',"IsNumeric",'Nan_Count','Valid_Count','Nan %','Total', \
+                               'Min','Max','Mean','Std dev','Var'])
+
+    for col in inDataFrame:
+        df.loc[icol]=[icol, \
+                      col, \
+                      df_dtypes[col], \
+                      False,
+                      inDataFrame[col].isnull().sum(), \
+                      inDataFrame[col].count(), \
+                      0, \
+                      0, \
+                      0, \
+                      0, \
+                      0, \
+                      0, \
+                      0]
+                      
+        if df_dtypes[col] in meandatatypes: 
+            df.ix[icol,"IsNumeric"]=True
+            df.ix[icol,'Min']=inDataFrame[col].min()
+            df.ix[icol,'Max']=inDataFrame[col].max()
+            df.ix[icol,'Mean']=inDataFrame[col].mean()
+            df.ix[icol,'Std dev']=inDataFrame[col].std()
+            df.ix[icol,'Var']=inDataFrame[col].var()
+        #elif df_dtypes[col] in ['object']:
+            #df.ix[icol,'Min']=inDataFrame[col].min()[0:3]
+            #df.ix[icol,'Max']=inDataFrame[col].max()[0:3]
+
+        icol+=1
+        
+    df['Total']=df['Nan_Count']+df['Valid_Count']
+    df['Nan %']=(df['Nan_Count']/df['Total']) * 100
+    return df
+
