@@ -1,0 +1,260 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Nov  4 10:58:50 2014
+
+@author: Suzanne
+"""
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt 
+import os
+import socket
+
+# ================================================================================
+# Create some functions to use in the main body of the code
+# ================================================================================
+
+# If any step goes badly wrong then use this global variable to halt the execution
+# OK, so I know this is overkill for this straightforward coursework exercise, but if I build up this approach
+# to working with python generally then it will save me time in the future, and I can reuse
+# this code as it is generic
+
+globalStop = False
+data_path = ''              #dynamically determine whether I'm at home or at CityUni in the MAIN function and set this accordingly
+
+def stop_here():
+    globalStop=True
+
+# -------------------------------------------------------------------------------------------------
+# Check all files are utf-8 encoded, and write a new file if not    
+# Based somewhat on code from http://stackoverflow.com/questions/436220/python-is-there-a-way-to-determine-the-encoding-of-text-file
+import codecs
+def file_encoding(data_path):
+    for root, dirs, files in os.walk(data_path):
+        for file in files:
+            if file.endswith(".csv"):
+                 print("===============================================")
+                 print(os.path.join(root, file))              
+                 check_encoding(data_path, file, stop_here)
+                
+    # Use my global variable to flag if anything has gone wrong
+    # because I can't do anything until this problem is fixed
+    if globalStop == True:
+        print("")
+        print("Fix the file encoding problem before proceeding")
+        return
+    
+def check_encoding(data_path, in_file, stop_here):
+
+    got_encoding = False
+    encodings = ['utf-8', 'windows-1250', 'windows-1252']
+
+    for e in encodings:
+        try:
+            fh = codecs.open(data_path + in_file, 'r', encoding=e)
+            fh.readlines()
+            fh.seek(0)
+        except UnicodeDecodeError:
+            continue
+            #print('got unicode error with %s , trying different encoding' % e)
+        else:
+            print('opening the file with encoding: {0}'.format(e))
+            got_encoding = True
+
+        # If the file is utf-8 then that's great        
+        if e == 'utf-8':
+            stop_here()
+            return
+           
+        # If I don't know what encoding it is, that's a problem
+        if got_encoding == False:
+            print("FATAL ERROR : Need to determine encoding for {0}".format(data_path + in_file))
+            stop_here()
+            return
+
+        # I know the encoding, but it's not utf-8 so need a utf-8 version
+        print("WARNING : rewriting {0} with encoding {1} as utf-8 file".format(data_path + in_file, e))
+        print("Rename the files manually before proceeding")
+        stop_here()
+        
+        stream_in_file = codecs.open(data_path + in_file, 'r', e)
+        stream_out_file = codecs.open(data_path + 'NEW_' + in_file, "w", "utf-8")
+        
+        for line in stream_in_file:
+            stream_out_file.write(line)
+
+# -------------------------------------------------------------------------------------------------
+# Investigate the csv files (once they have been utf-8 checked) by reading them each into a dataframe 
+# and then analysing the dataframe for Nans, means and a few other things
+def data_investigate(data_path):
+          
+    # Have a look at the header of each file. Print to a file so I 
+    # can see what's going on more easily
+    diag_file = open(data_path + "datadiagnostics.txt", 'w')
+    
+    for root, dirs, files in os.walk(data_path):
+        for file in files:
+            if file.endswith(".csv"):
+                 print("===============================================")
+                 print("===============================================", file=diag_file)
+                 
+                 in_file = pd.read_csv(data_path + file, skiprows=19)
+                 print('File is {0}, Rows = {1}, Cols = {2}'.format(file, in_file.shape[0], in_file.shape[1]))
+                 print('File is {0}, Rows = {1}, Cols = {2}'.format(file, in_file.shape[0], in_file.shape[1]), file=diag_file)
+
+                 print(df_analysis(in_file))
+                 print(df_analysis(in_file),file=diag_file)
+                 
+    diag_file.close()
+
+# Generic function to analyse a dataframe and return some useful summary information
+# NB This is all my own work, I've been developing this as the course has gone along, and adding 
+#    to it as I see the sorts of stats I'll be interested in, saves me having to write the 
+#    same sort of stuff for each dataset
+def df_analysis(inDataFrame):
+    icol=0
+    meandatatypes=['float64','int64','float']
+    df_dtypes = inDataFrame.dtypes
+
+    df = pd.DataFrame(columns=['offset','colname','coltype',"IsNumeric",'Nan_Count','Valid_Count','Nan %','Total', \
+                               'Min','Max','Mean','Std dev','Var'])
+
+    for col in inDataFrame:
+        df.loc[icol]=[icol, \
+                      col, \
+                      df_dtypes[col], \
+                      False,
+                      inDataFrame[col].isnull().sum(), \
+                      inDataFrame[col].count(), \
+                      0, \
+                      0, \
+                      0, \
+                      0, \
+                      0, \
+                      0, \
+                      0]
+                      
+        if df_dtypes[col] in meandatatypes: 
+            df.ix[icol,"IsNumeric"]=True
+            df.ix[icol,'Min']=inDataFrame[col].min()
+            df.ix[icol,'Max']=inDataFrame[col].max()
+            df.ix[icol,'Mean']=inDataFrame[col].mean()
+            df.ix[icol,'Std dev']=inDataFrame[col].std()
+            df.ix[icol,'Var']=inDataFrame[col].var()
+            
+        # Need to think about this bit some more
+        #elif df_dtypes[col] in ['object']:
+            #df.ix[icol,'Min']=inDataFrame[col].min()[0:3]
+            #df.ix[icol,'Max']=inDataFrame[col].max()[0:3]
+
+        icol+=1
+        
+    df['Total']=df['Nan_Count']+df['Valid_Count']
+    df['Nan %']=(df['Nan_Count']/df['Total']) * 100
+    return df
+
+# -------------------------------------------------------------------------------------------------
+# Get data from the three variables I have chosen for the analysis
+# strip out the key column (ONS Code (new)) and the data columns 
+# Rename the data columns to something meaningful as they are all called Indicator value
+# Finally, create a single merged dataset
+# Once checked for sensibility, write it to a file so I don't have to do this step every time
+def data_createAnalysis(data_path):
+    # Columns we want to output
+    columns_ToUse = ['ONS Code (new)','Indicator value'] 
+    
+    # GCSE Data
+    data_GCSE = pd.read_csv(data_path + 'GCSEachieved5ACincEngMathsCSV.CSV', skiprows=19)
+    data_GCSE = data_GCSE[columns_ToUse ]
+    data_GCSE.rename(columns={'ONS Code (new)':'ONS Code','Indicator value':'GCSE'}, inplace=True)
+
+    # Obese at Year 6 
+    data_ObeseY6 = pd.read_csv(data_path + 'ObesechildrenYear6CSV.CSV', skiprows=19)
+    data_ObeseY6 = data_ObeseY6[columns_ToUse]
+    data_ObeseY6.rename(columns={'ONS Code (new)':'ONS Code','Indicator value':'ObeseY6'}, inplace=True)
+
+    # Alcohol related stays at under 18
+    data_AlcUnder18 = pd.read_csv(data_path + 'Alcoholspecifichospitalstaysunder18CSV.CSV', skiprows=19)
+    data_AlcUnder18 = data_AlcUnder18[columns_ToUse]
+    data_AlcUnder18.rename(columns={'ONS Code (new)':'ONS Code','Indicator value':'AlcoholU18'}, inplace=True)
+    
+    # Merge data. Use an inner join as we only want records in both datasets
+    data_Analysis = pd.merge(data_GCSE, data_ObeseY6, left_on='ONS Code', right_on='ONS Code', how='inner')
+    data_Analysis = pd.merge(data_Analysis, data_AlcUnder18, left_on='ONS Code', right_on='ONS Code', how='inner')
+
+    # DOUBLE CHECK
+    # Have a look at the dataset to see if it looks ok
+    # check back to the original Dataframes and check merged data
+    # has same shape as merged, number of records I'm expecting etc
+    print("GCSE")
+    print(df_analysis(data_GCSE))
+    print("ObeseY6")
+    print(df_analysis(data_ObeseY6))
+    print("AlcUnder18")
+    print(df_analysis(data_AlcUnder18))
+    print("Merged dataset")
+    print(df_analysis(data_Analysis))
+    #return data_Analysis
+    
+    # Write to a CSV file for future use
+    data_Analysis.to_csv(data_path + 'Analysis.csv', encoding='utf-8')
+
+# -------------------------------------------------------------------------------------------------
+# Now that I've got the data all nice and checked and organised, I can start to do something with it
+# Read it in and do some basic visualisations
+def data_Visualise(data_path):
+    data_Analysis = pd.read_csv(data_path + 'Analysis.CSV')
+    col_names = list(data_Analysis)
+    np_data = data_Analysis.as_matrix()
+    
+    for col in range(2,5):
+        plt.hist(np_data[:,col])
+        plt.title(col_names[col])
+        plt.show()
+        
+    plt.scatter(data_Analysis.GCSE, data_Analysis.AlcoholU18)
+    plt.show()
+
+    plt.scatter(data_Analysis.GCSE, data_Analysis.ObeseY6)
+    plt.show()
+    
+# ======================================================================================
+# It's the The Main Thing. 
+# I don't want to run everything every time, so startstep is an integer arguement which
+# allows me to choose which step I start at just by 1 keypress rather than having to comment
+# out whole sections of code as I develop my program (I kept getting confused doing it that way)
+# ======================================================================================
+def main(startstep):
+    # Find out whether I am running this at home or at City Uni nd set direcories accordingly
+    MyComputer=socket.gethostname()
+    if MyComputer[0:4]=='Suza':
+        data_path = 'C:/Users/Public/Documents/MSc-DataScience/INM430/CW01/Data/'
+
+    # Step 1. Check the file encodings
+    if 1 >= startstep:
+        file_encoding(data_path)
+        if globalStop == True:
+            return
+    
+    # Step 2. Have a look at all the data files, checks for Nans and general cleanliness
+    if 2 >= startstep:
+        data_investigate(data_path)
+        
+    # Step 3. Having chosen the files I want to use, create my analysis data file
+    if 3 >= startstep:
+        data_createAnalysis(data_path)
+        
+    # Step 4. Get the data and visualise it
+    if 4 >= startstep:
+        data_Visualise(data_path)
+    
+# ========================================================================================
+# Finally, run the program, choosing which step to start at.
+# ========================================================================================
+if __name__ == "__main__":
+    MyComputer=socket.gethostname()
+    if MyComputer[0:4]=='Suza':
+        data_path = 'C:/Users/Public/Documents/MSc-DataScience/INM430/CW01/Data/'
+
+    main(4)
