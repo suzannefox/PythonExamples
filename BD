@@ -1,0 +1,214 @@
+#
+# SUZANNE FOX - Big Data Coursework - November 2014
+#
+
+import sys
+import os
+import re
+from operator import add
+import socket
+
+from collections import defaultdict
+from time import time
+import datetime
+
+from pyspark import SparkContext
+from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.classification import NaiveBayes
+
+# =====================================================================================
+# For each txt file that is read, this function -
+# 1. Determines what sort of Id marker there is and reports an error to the diagnostics
+#    file if it doesn't find one, so I can check the file manually
+# 2. Determines what sort of header line there is and reports and error if none
+# 3. Checks for footer information
+# 4. Strips the header, any footer, and blank lines from the file and creates an RDD
+# =====================================================================================
+def analyse_file(data_path, file_name, diag_file, sc, errors_only):
+
+	# Make sure there's / on the end of the path
+    if data_path[-1] != '/':
+        data_path += '/'
+		
+    # During development I write a lot of stuff to the diagnostics file
+    # I can turn this off by setting errors_only = True
+	# then I just get the erros that I need to do something with
+    if errors_only == False:
+        print >> diag_file,""
+        print >> diag_file,"Processing ",data_path + file_name
+
+    # -------------------------------------------------------------
+    # Read the file from disk
+    # -------------------------------------------------------------
+    myTextFile = sc.textFile(data_path + file_name)
+	
+    # Strip out any blank lines to speed things up later on
+    myTextFile = myTextFile.filter(lambda line: len(line) > 0)
+		
+    # -------------------------------------------------------------
+    # Test for line containing Id text
+    # -------------------------------------------------------------
+    Id_Types = ['[EBook ', '[Etext ', '[eBook ' ]
+
+    got_Id = False
+    for Id in Id_Types:
+    	hasId = myTextFile.filter(lambda line: Id in line)
+        if errors_only == False:
+            print >> diag_file,"id test for ",Id
+            print >> diag_file,hasId
+        if hasId.count() > 0:
+            got_Id = True
+            break
+
+    if got_Id == True:
+        out = hasId.collect()
+        if errors_only == False:
+            print >> diag_file," Id line ",out
+
+    if got_Id == False:
+        print >> diag_file,"FATAL ERROR, no Id in file ", data_path + file_name
+        return
+
+    # -------------------------------------------------------------
+    # Test for which sort of Header Identifier we have
+	# NOTE : *** START ... *** isn't strict enough because there may be
+    #        *** START: FULL LICENCE ... *** later in the file
+    # -------------------------------------------------------------
+    Header_Types = ['^\*\*\* START (.*)\/*/*/*$',\
+					'^\*\*\*The Project Gutenberg(.*)',\
+                    '^\*\*\*START OF THE PROJECT GUTENBERG EBOOK(.*)',\
+                    '^\*END THE SMALL PRINT']
+
+    got_Header = False
+    myHeader = ''
+	
+    for Header in Header_Types:
+    	hasHeader = myTextFile.filter(lambda line: re.search(Header, line))
+        if hasHeader.count() > 0:
+            myHeader = Header
+            got_Header = True
+            break
+
+    if got_Header == True:
+        out = hasHeader.collect()
+        if errors_only == False:
+            print >> diag_file," Header line ",out
+    else:
+        print >> diag_file,"FATAL ERROR, no Header in file ", data_path + file_name
+        return
+		
+    # Find the line no which contains the header
+    output = myTextFile.collect()
+
+    line_no = 0
+    line_header = -1
+
+    for line in output:
+        line_no +=1
+        if re.search(Header, line) != None:
+            break
+
+    line_header = line_no
+	
+    # -----------------------------------------------------------------------
+    # Test for things that might (or might not) happen at the end of the file
+    # -----------------------------------------------------------------------
+    Footer_Types = ['^\*\*\* END OF THIS (.*)\/*/*/*$',\
+					'^\*\*\* START: FULL LICEN(.*)']
+    got_Footer = False
+    myFooter = ''
+	
+    for Footer in Footer_Types:
+    	hasFooter = myTextFile.filter(lambda line: re.search(Footer, line))
+        if hasFooter.count() > 0:
+            myFooter = Footer
+            got_Footer = True
+            break
+
+    # Find the line that contains the footer if there is one
+    line_footer = -1
+    if got_Footer == True:
+        line_no = 0
+        for line in output:
+            line_no +=1
+            if re.search(Footer, line) != None:
+                break
+        line_footer = line_no
+
+    # -------------------------------------------------------------
+    # Strip out the important bits of the file
+    # -------------------------------------------------------------
+    if got_Footer == True:
+        output = output[line_header:line_footer]
+    else:
+        output = output[line_header:]
+		
+    # -------------------------------------------------------------
+	# Parallelize the RDD
+    # -------------------------------------------------------------
+    myGoodFile = sc.parallelize(output)
+
+    if errors_only == False:
+        print >> diag_file, data_path, file_name,",",myTextFile.count(),",",line_header,",",line_footer,",",myGoodFile.count()
+
+# =====================================================================================
+# Iterate over the files in the suppied data_path
+# Arguments -
+#   stop_after : stop processing after this number of files, if zero then no limit
+#   batch_size : report to the screen after this number of files
+#                have been processed and tell me how long the batch took
+# =====================================================================================
+def walk_through_txt_files(data_path, stop_after, batch_size):
+    start_time = time()
+    batch_time = time()
+    file_counter = 0
+
+    # Connect to Spark
+    sc = SparkContext(appName="Big Data Coursework") 
+
+   # open a diagnostics file
+    diag_file = open('diagnostics.log','w')
+    print >> diag_file,"Run started at ",datetime.datetime.now()
+	
+    for root, dirs, files in os.walk(data_path):
+        for each_file in files:
+
+#            if each_file != '22227.txt':
+#                continue
+			
+            file_counter +=1
+            if stop_after > 0 and (file_counter > stop_after):
+                return
+
+            # Let me know how it's going every batch_size files
+            if file_counter % batch_size == 0:
+                batch_time = time() - batch_time
+                print file_counter," files processed, time taken for batch is ",batch_time
+                batch_time = time()
+
+            # Analyse each file
+            analyse_file(root, each_file, diag_file, sc, True)
+			
+    # close spark
+    sc.stop()
+
+# =====================================================================
+# It's The Main Thing
+# =====================================================================
+if __name__ == "__main__":    
+
+    MyComputer=socket.gethostname()
+    
+    # I can run this from home or Uni without having to edit
+    # or type unneccesary arguments which I keep mis-spelling
+    # or forgetting that linux is case sensitive
+    if MyComputer[0:4]=='Suza':
+        data_path = "C:/Users/Public/Documents/MSc-DataScience/INM432/CW/"
+    else:
+        data_path = "/data/extra/gutenberg/text-part/"
+
+    print ("==================================================================")
+    print ("Main : Starting run at : ", time())
+
+    walk_through_txt_files(data_path, 0, 100)
+	
